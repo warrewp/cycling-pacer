@@ -44,7 +44,7 @@ class ElevationPowerChart(FigureCanvasQTAgg):
     def __init__(self, parent=None):
         self.fig = Figure(figsize=(8, 2.8), dpi=100)
         self.fig.set_facecolor('#f8f8f8')
-        self.fig.subplots_adjust(left=0.07, right=0.93, top=0.95, bottom=0.15)
+        self.fig.subplots_adjust(left=0.05, right=0.95, top=0.92, bottom=0.15)
         super().__init__(self.fig)
         self.ax_power = self.fig.add_subplot(111)
         self.ax_power.set_facecolor('#f8f8f8')
@@ -80,10 +80,10 @@ class ElevationPowerChart(FigureCanvasQTAgg):
         cum_start = [s['cumulative_m'] / 1000 * dist_scale for s in segments]
         widths = [s['distance_m'] / 1000 * dist_scale for s in segments]
         self.ax_elev.bar(cum_start, elevations, width=widths, align='edge',
-                         color='#e8e8e8', edgecolor='none')
-        self.ax_elev.set_ylabel(f'Elevation ({elev_unit})', fontsize=9, color='#bbb')
+                         color='#e8e8e8', edgecolor='none', label=f'Elev ({elev_unit})')
         self.ax_elev.tick_params(axis='y', labelsize=8, colors='#bbb')
         self.ax_elev.spines['top'].set_visible(False)
+        self.ax_elev.set_ylabel('')
 
         # Power on left axis (foreground)
         colors = []
@@ -104,9 +104,20 @@ class ElevationPowerChart(FigureCanvasQTAgg):
         if len(distances) == 1:
             self.ax_power.plot(distances, powers, 'o', color=colors[0])
 
-        self.ax_power.set_ylabel('Power (W)', fontsize=9, color='#333')
+        # Dummy artists for legend
+        from matplotlib.lines import Line2D
+        from matplotlib.patches import Patch
+        legend_items = [
+            Line2D([0], [0], color='#4CAF50', linewidth=2, label='Power (W)'),
+            Patch(facecolor='#e8e8e8', edgecolor='none', label=f'Elevation ({elev_unit})'),
+        ]
+        self.ax_power.legend(handles=legend_items, loc='upper left', fontsize=8,
+                             framealpha=0.8, edgecolor='#ddd', fancybox=False)
+
+        self.ax_power.set_ylabel('')
         self.ax_power.set_xlabel(f'Distance ({dist_unit})', fontsize=9, color='#666')
-        self.ax_power.tick_params(axis='both', labelsize=8, colors='#333')
+        self.ax_power.tick_params(axis='y', labelsize=8, colors='#333')
+        self.ax_power.tick_params(axis='x', labelsize=8, colors='#666')
         self.ax_power.spines['top'].set_visible(False)
         self.ax_power.set_zorder(self.ax_elev.get_zorder() + 1)
         self.ax_power.patch.set_visible(False)
