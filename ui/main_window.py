@@ -5,13 +5,15 @@ from pathlib import Path
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QToolBar,
     QPushButton, QFileDialog, QMessageBox, QSplitter,
-    QApplication, QStatusBar, QFrame,
+    QApplication, QStatusBar, QFrame, QTabWidget, QInputDialog,
+    QSizePolicy,
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QAction
 
 from ui.inputs_panel import InputsPanel
 from ui.results_panel import ResultsPanel
+from ui.saved_plans_panel import SavedPlansPanel, save_plan
 from ui.cheat_sheet import open_cheat_sheet
 from core.gpx_parser import parse_gpx, build_segments, assign_surface
 from core.optimizer import optimize_pacing
@@ -111,6 +113,12 @@ class MainWindow(QMainWindow):
         self.run_btn_toolbar.setEnabled(False)
         toolbar.addWidget(self.run_btn_toolbar)
 
+        self.save_btn = QPushButton("Save Plan")
+        self.save_btn.setStyleSheet(TOOLBAR_BTN)
+        self.save_btn.clicked.connect(self._save_plan)
+        self.save_btn.setEnabled(False)
+        toolbar.addWidget(self.save_btn)
+
         toolbar.addSeparator()
 
         self.export_fit_btn = QPushButton("Export FIT")
@@ -133,9 +141,6 @@ class MainWindow(QMainWindow):
 
         # Spacer
         spacer = QWidget()
-        spacer.setSizePolicy(spacer.sizePolicy().horizontalPolicy(), spacer.sizePolicy().verticalPolicy())
-        spacer.setMinimumWidth(0)
-        from PyQt6.QtWidgets import QSizePolicy
         spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         toolbar.addWidget(spacer)
 
@@ -173,13 +178,51 @@ class MainWindow(QMainWindow):
         self.inputs_panel.setMaximumWidth(380)
         splitter.addWidget(self.inputs_panel)
 
+        # Tab widget for Pacer / Saved Plans
+        self.tabs = QTabWidget()
+        self.tabs.setStyleSheet("""
+            QTabWidget::pane {
+                border: none;
+                background: #f2f2f2;
+            }
+            QTabBar::tab {
+                background: #e8e8e8;
+                border: none;
+                padding: 8px 24px;
+                font-size: 12px;
+                font-weight: bold;
+                color: #666;
+                border-top-left-radius: 6px;
+                border-top-right-radius: 6px;
+                margin-right: 2px;
+            }
+            QTabBar::tab:selected {
+                background: #f2f2f2;
+                color: #333;
+            }
+            QTabBar::tab:hover:!selected {
+                background: #ddd;
+            }
+        """)
+
         self.results_panel = ResultsPanel()
-        splitter.addWidget(self.results_panel)
+        self.tabs.addTab(self.results_panel, "Pacer")
+
+        self.saved_plans_panel = SavedPlansPanel()
+        self.saved_plans_panel.plan_loaded.connect(self._on_plan_loaded)
+        self.tabs.addTab(self.saved_plans_panel, "Saved Plans")
+        self.tabs.currentChanged.connect(self._on_tab_changed)
+
+        splitter.addWidget(self.tabs)
 
         splitter.setStretchFactor(0, 0)
         splitter.setStretchFactor(1, 1)
 
         self.setCentralWidget(splitter)
+
+    def _on_tab_changed(self, index):
+        if index == 1:
+            self.saved_plans_panel.refresh()
 
     def _build_statusbar(self):
         self.statusbar = QStatusBar()
@@ -197,6 +240,7 @@ class MainWindow(QMainWindow):
             self._gpx_path = path
             self._rebuild_segments()
             self.run_btn_toolbar.setEnabled(True)
+            self.tabs.setCurrentIndex(0)
 
             if self._segments and self._segments[0].get('elevation_m', 0) > 0:
                 self.inputs_panel.altitude_spin.setValue(self._segments[0]['elevation_m'])
@@ -254,6 +298,7 @@ class MainWindow(QMainWindow):
         self.export_fit_btn.setEnabled(True)
         self.export_zwo_btn.setEnabled(True)
         self.print_btn.setEnabled(True)
+        self.save_btn.setEnabled(True)
 
         status = "Optimization complete"
         if not result['solver_success']:
@@ -266,6 +311,35 @@ class MainWindow(QMainWindow):
         self.inputs_panel.run_btn.setEnabled(True)
         self.statusbar.showMessage("Optimization failed")
         QMessageBox.critical(self, "Optimizer Error", f"Optimization failed:\n{msg}")
+
+    def _save_plan(self):
+        if not self._result:
+            return
+        default_name = os.path.splitext(os.path.basename(self._gpx_path or 'Plan'))[0]
+        name, ok = QInputDialog.getText(self, "Save Pacing Plan", "Plan name:", text=default_name)
+        if not ok or not name.strip():
+            return
+
+        params = self.inputs_panel.get_params()
+        filepath = save_plan(name.strip(), self._result, params, self._gpx_path or '')
+        self.statusbar.showMessage(f"Plan saved: {name.strip()}")
+
+    def _on_plan_loaded(self, plan):
+        result = plan.get('result', {})
+        params = plan.get('params', {})
+        ftp = params.get('ftp_w', 200)
+
+        self._result = result
+        self._gpx_path = plan.get('gpx_path', '')
+        self.results_panel.update_results(result, ftp)
+
+        self.export_fit_btn.setEnabled(True)
+        self.export_zwo_btn.setEnabled(True)
+        self.print_btn.setEnabled(True)
+        self.save_btn.setEnabled(True)
+
+        self.tabs.setCurrentIndex(0)
+        self.statusbar.showMessage(f"Loaded plan: {plan.get('name', 'Untitled')}")
 
     def _export_fit(self):
         if not self._result:
