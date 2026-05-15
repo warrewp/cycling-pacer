@@ -77,6 +77,7 @@ class MainWindow(QMainWindow):
         self.setStyleSheet("QMainWindow { background: #f2f2f2; }")
 
         self._gpx_path = None
+        self._trackpoints = None
         self._segments = None
         self._result = None
         self._worker = None
@@ -192,15 +193,9 @@ class MainWindow(QMainWindow):
             return
 
         try:
-            points = parse_gpx(path)
-            params = self.inputs_panel.get_params()
-            self._segments = build_segments(points, params['segment_length_m'])
-            self._segments = assign_surface(self._segments)
+            self._trackpoints = parse_gpx(path)
             self._gpx_path = path
-
-            filename = os.path.basename(path)
-            total_km = sum(s['distance_m'] for s in self._segments) / 1000
-            self.statusbar.showMessage(f"Loaded {filename}: {len(self._segments)} segments, {total_km:.1f} km")
+            self._rebuild_segments()
             self.run_btn_toolbar.setEnabled(True)
 
             if self._segments and self._segments[0].get('elevation_m', 0) > 0:
@@ -209,11 +204,23 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "GPX Error", f"Failed to parse GPX file:\n{str(e)}")
 
+    def _rebuild_segments(self):
+        if not self._trackpoints:
+            return
+        params = self.inputs_panel.get_params()
+        self._segments = build_segments(self._trackpoints, params['segment_length_m'])
+        self._segments = assign_surface(self._segments)
+
+        filename = os.path.basename(self._gpx_path)
+        total_km = sum(s['distance_m'] for s in self._segments) / 1000
+        self.statusbar.showMessage(f"Loaded {filename}: {len(self._segments)} segments, {total_km:.1f} km")
+
     def _run_optimizer(self):
-        if not self._segments:
+        if not self._trackpoints:
             QMessageBox.warning(self, "No Course", "Please open a GPX file first.")
             return
 
+        self._rebuild_segments()
         params = self.inputs_panel.get_params()
 
         if params['default_surface']:
