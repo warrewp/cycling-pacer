@@ -1,0 +1,352 @@
+from PyQt6.QtWidgets import (
+    QWidget, QVBoxLayout, QGroupBox, QFormLayout, QDoubleSpinBox,
+    QComboBox, QSlider, QLabel, QHBoxLayout, QPushButton,
+)
+from PyQt6.QtCore import Qt, pyqtSignal
+from core.physics import load_surfaces
+from ui.units import kg_to_lb, lb_to_kg, m_to_ft, ft_to_m, kmh_to_mph, mph_to_kmh, c_to_f, f_to_c
+
+
+CDA_PRESETS = {
+    'Upright MTB (0.450)': 0.450,
+    'Gravel relaxed (0.380)': 0.380,
+    'Gravel aggressive (0.320)': 0.320,
+    'Road aero (0.260)': 0.260,
+    'TT (0.210)': 0.210,
+    'Custom': None,
+}
+
+
+class InputsPanel(QWidget):
+    run_requested = pyqtSignal()
+    units_changed = pyqtSignal(str)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._metric = True
+        layout = QVBoxLayout(self)
+        layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+
+        layout.addWidget(self._build_rider_group())
+        layout.addWidget(self._build_bike_group())
+        layout.addWidget(self._build_weather_group())
+        layout.addWidget(self._build_race_group())
+
+        self.run_btn = QPushButton("Run Optimizer")
+        self.run_btn.setStyleSheet("font-size: 14px; padding: 8px; font-weight: bold;")
+        self.run_btn.clicked.connect(self.run_requested.emit)
+        layout.addWidget(self.run_btn)
+
+        layout.addStretch()
+
+    @property
+    def is_metric(self):
+        return self._metric
+
+    def set_units(self, metric: bool):
+        if metric == self._metric:
+            return
+        old_metric = self._metric
+        self._metric = metric
+
+        # Convert current display values
+        if metric:
+            # imperial -> metric
+            self.weight_spin.blockSignals(True)
+            self.weight_spin.setRange(30, 200)
+            self.weight_spin.setValue(lb_to_kg(self.weight_spin.value()))
+            self.weight_spin.setSuffix(" kg")
+            self.weight_spin.blockSignals(False)
+
+            self.bike_weight_spin.blockSignals(True)
+            self.bike_weight_spin.setRange(3, 30)
+            self.bike_weight_spin.setValue(lb_to_kg(self.bike_weight_spin.value()))
+            self.bike_weight_spin.setSuffix(" kg")
+            self.bike_weight_spin.blockSignals(False)
+
+            self.wind_speed_spin.blockSignals(True)
+            self.wind_speed_spin.setValue(mph_to_kmh(self.wind_speed_spin.value()))
+            self.wind_speed_spin.setSuffix(" km/h")
+            self.wind_speed_spin.blockSignals(False)
+
+            self.temp_spin.blockSignals(True)
+            self.temp_spin.setRange(-20, 50)
+            self.temp_spin.setValue(f_to_c(self.temp_spin.value()))
+            self.temp_spin.setSuffix(" °C")
+            self.temp_spin.blockSignals(False)
+
+            self.altitude_spin.blockSignals(True)
+            self.altitude_spin.setRange(0, 6000)
+            self.altitude_spin.setValue(ft_to_m(self.altitude_spin.value()))
+            self.altitude_spin.setSuffix(" m")
+            self.altitude_spin.blockSignals(False)
+
+            self.seg_length_label.setText("Segment length (m):")
+        else:
+            # metric -> imperial
+            self.weight_spin.blockSignals(True)
+            self.weight_spin.setRange(66, 440)
+            self.weight_spin.setValue(kg_to_lb(self.weight_spin.value()))
+            self.weight_spin.setSuffix(" lbs")
+            self.weight_spin.blockSignals(False)
+
+            self.bike_weight_spin.blockSignals(True)
+            self.bike_weight_spin.setRange(7, 66)
+            self.bike_weight_spin.setValue(kg_to_lb(self.bike_weight_spin.value()))
+            self.bike_weight_spin.setSuffix(" lbs")
+            self.bike_weight_spin.blockSignals(False)
+
+            self.wind_speed_spin.blockSignals(True)
+            self.wind_speed_spin.setValue(kmh_to_mph(self.wind_speed_spin.value()))
+            self.wind_speed_spin.setSuffix(" mph")
+            self.wind_speed_spin.blockSignals(False)
+
+            self.temp_spin.blockSignals(True)
+            self.temp_spin.setRange(-4, 122)
+            self.temp_spin.setValue(c_to_f(self.temp_spin.value()))
+            self.temp_spin.setSuffix(" °F")
+            self.temp_spin.blockSignals(False)
+
+            self.altitude_spin.blockSignals(True)
+            self.altitude_spin.setRange(0, 20000)
+            self.altitude_spin.setValue(m_to_ft(self.altitude_spin.value()))
+            self.altitude_spin.setSuffix(" ft")
+            self.altitude_spin.blockSignals(False)
+
+            self.seg_length_label.setText("Segment length (m):")
+
+        self.units_changed.emit("metric" if metric else "imperial")
+
+    def _build_rider_group(self):
+        group = QGroupBox("Rider")
+        form = QFormLayout(group)
+
+        self.weight_spin = QDoubleSpinBox()
+        self.weight_spin.setRange(30, 200)
+        self.weight_spin.setValue(80)
+        self.weight_spin.setSuffix(" kg")
+        form.addRow("Weight:", self.weight_spin)
+
+        self.ftp_spin = QDoubleSpinBox()
+        self.ftp_spin.setRange(50, 600)
+        self.ftp_spin.setDecimals(0)
+        self.ftp_spin.setValue(200)
+        self.ftp_spin.setSuffix(" W")
+        form.addRow("FTP:", self.ftp_spin)
+
+        if_layout = QHBoxLayout()
+        self.if_slider = QSlider(Qt.Orientation.Horizontal)
+        self.if_slider.setRange(60, 95)
+        self.if_slider.setValue(75)
+        self.if_label = QLabel("0.75 — Moderate")
+        self.if_slider.valueChanged.connect(self._update_if_label)
+        if_layout.addWidget(self.if_slider)
+        if_layout.addWidget(self.if_label)
+        form.addRow("Target Effort:", if_layout)
+
+        return group
+
+    def _update_if_label(self, val):
+        if_val = val / 100
+        if if_val < 0.70:
+            desc = "Easy"
+        elif if_val > 0.85:
+            desc = "Hard"
+        else:
+            desc = "Moderate"
+        self.if_label.setText(f"{if_val:.2f} — {desc}")
+
+    def _build_bike_group(self):
+        group = QGroupBox("Bike")
+        form = QFormLayout(group)
+
+        self.bike_weight_spin = QDoubleSpinBox()
+        self.bike_weight_spin.setRange(3, 30)
+        self.bike_weight_spin.setValue(9)
+        self.bike_weight_spin.setSuffix(" kg")
+        form.addRow("System weight:", self.bike_weight_spin)
+
+        cda_layout = QHBoxLayout()
+        self.cda_combo = QComboBox()
+        self.cda_combo.addItems(CDA_PRESETS.keys())
+        self.cda_combo.setCurrentText('Gravel relaxed (0.380)')
+        self.cda_combo.currentTextChanged.connect(self._on_cda_preset)
+        cda_layout.addWidget(self.cda_combo)
+
+        self.cda_spin = QDoubleSpinBox()
+        self.cda_spin.setRange(0.15, 0.60)
+        self.cda_spin.setDecimals(3)
+        self.cda_spin.setSingleStep(0.01)
+        self.cda_spin.setValue(0.380)
+        self.cda_spin.setSuffix(" m²")
+        cda_layout.addWidget(self.cda_spin)
+        form.addRow("CdA:", cda_layout)
+
+        self.drivetrain_spin = QDoubleSpinBox()
+        self.drivetrain_spin.setRange(0.93, 0.99)
+        self.drivetrain_spin.setDecimals(2)
+        self.drivetrain_spin.setSingleStep(0.01)
+        self.drivetrain_spin.setValue(0.97)
+        form.addRow("Drivetrain eff.:", self.drivetrain_spin)
+
+        self.surface_combo = QComboBox()
+        surfaces = load_surfaces()
+        self.surface_combo.addItems(surfaces.keys())
+        self.surface_combo.setCurrentText('gravel_packed')
+        form.addRow("Default surface:", self.surface_combo)
+
+        return group
+
+    def _on_cda_preset(self, text):
+        val = CDA_PRESETS.get(text)
+        if val is not None:
+            self.cda_spin.setValue(val)
+            self.cda_spin.setEnabled(False)
+        else:
+            self.cda_spin.setEnabled(True)
+
+    def _build_weather_group(self):
+        group = QGroupBox("Weather")
+        form = QFormLayout(group)
+
+        self.wind_speed_spin = QDoubleSpinBox()
+        self.wind_speed_spin.setRange(0, 100)
+        self.wind_speed_spin.setValue(0)
+        self.wind_speed_spin.setSuffix(" km/h")
+        form.addRow("Wind speed:", self.wind_speed_spin)
+
+        self.wind_dir_combo = QComboBox()
+        self.wind_dir_combo.addItems(["Headwind", "Tailwind", "Crosswind (×0.5 effective)"])
+        form.addRow("Wind direction:", self.wind_dir_combo)
+
+        self.temp_spin = QDoubleSpinBox()
+        self.temp_spin.setRange(-20, 50)
+        self.temp_spin.setValue(20)
+        self.temp_spin.setSuffix(" °C")
+        form.addRow("Temperature:", self.temp_spin)
+
+        self.altitude_spin = QDoubleSpinBox()
+        self.altitude_spin.setRange(0, 6000)
+        self.altitude_spin.setDecimals(0)
+        self.altitude_spin.setValue(0)
+        self.altitude_spin.setSuffix(" m")
+        form.addRow("Start altitude:", self.altitude_spin)
+
+        return group
+
+    def _build_race_group(self):
+        group = QGroupBox("Race Settings")
+        form = QFormLayout(group)
+
+        self.min_power_spin = QDoubleSpinBox()
+        self.min_power_spin.setRange(0, 200)
+        self.min_power_spin.setDecimals(0)
+        self.min_power_spin.setValue(60)
+        self.min_power_spin.setSuffix(" W")
+        form.addRow("Min power:", self.min_power_spin)
+
+        self.max_power_spin = QDoubleSpinBox()
+        self.max_power_spin.setRange(0, 1000)
+        self.max_power_spin.setDecimals(0)
+        self.max_power_spin.setValue(0)
+        self.max_power_spin.setSuffix(" W")
+        self.max_power_spin.setSpecialValueText("Auto (FTP × 1.15)")
+        form.addRow("Max power:", self.max_power_spin)
+
+        self.seg_length_combo = QComboBox()
+        self.seg_length_combo.addItems(["100", "200", "500"])
+        self.seg_length_combo.setCurrentText("200")
+        self.seg_length_label = QLabel("Segment length (m):")
+        form.addRow(self.seg_length_label, self.seg_length_combo)
+
+        return group
+
+    def get_params(self):
+        """Returns all params in SI/metric units regardless of display unit."""
+        if self._metric:
+            wind_kmh = self.wind_speed_spin.value()
+            temp_c = self.temp_spin.value()
+            alt_m = self.altitude_spin.value()
+            rider_kg = self.weight_spin.value()
+            bike_kg = self.bike_weight_spin.value()
+        else:
+            wind_kmh = mph_to_kmh(self.wind_speed_spin.value())
+            temp_c = f_to_c(self.temp_spin.value())
+            alt_m = ft_to_m(self.altitude_spin.value())
+            rider_kg = lb_to_kg(self.weight_spin.value())
+            bike_kg = lb_to_kg(self.bike_weight_spin.value())
+
+        wind_ms = wind_kmh / 3.6
+        wind_dir = self.wind_dir_combo.currentText()
+        if "Tailwind" in wind_dir:
+            wind_ms = -wind_ms
+        elif "Crosswind" in wind_dir:
+            wind_ms *= 0.5
+
+        from core.physics import air_density
+        rho = air_density(temp_c, alt_m)
+
+        max_power = self.max_power_spin.value()
+        if max_power == 0:
+            max_power = None
+
+        return {
+            'rider': {
+                'mass_kg': rider_kg + bike_kg,
+                'cda': self.cda_spin.value(),
+                'drivetrain_eff': self.drivetrain_spin.value(),
+            },
+            'env': {
+                'wind_ms': wind_ms,
+                'rho': rho,
+            },
+            'ftp_w': self.ftp_spin.value(),
+            'target_if': self.if_slider.value() / 100,
+            'min_power_w': self.min_power_spin.value(),
+            'max_power_w': max_power,
+            'segment_length_m': int(self.seg_length_combo.currentText()),
+            'default_surface': self.surface_combo.currentText(),
+            'temperature_c': temp_c,
+        }
+
+    def get_state(self):
+        return {
+            'units': 'metric' if self._metric else 'imperial',
+            'weight': self.weight_spin.value(),
+            'ftp': self.ftp_spin.value(),
+            'target_if': self.if_slider.value(),
+            'bike_weight': self.bike_weight_spin.value(),
+            'cda_preset': self.cda_combo.currentText(),
+            'cda': self.cda_spin.value(),
+            'drivetrain': self.drivetrain_spin.value(),
+            'surface': self.surface_combo.currentText(),
+            'wind_speed': self.wind_speed_spin.value(),
+            'wind_dir': self.wind_dir_combo.currentText(),
+            'temperature': self.temp_spin.value(),
+            'altitude': self.altitude_spin.value(),
+            'min_power': self.min_power_spin.value(),
+            'max_power': self.max_power_spin.value(),
+            'segment_length': self.seg_length_combo.currentText(),
+        }
+
+    def set_state(self, state):
+        if not state:
+            return
+        saved_metric = state.get('units', 'metric') == 'metric'
+        if not saved_metric:
+            self.set_units(False)
+        self.weight_spin.setValue(state.get('weight', 80 if self._metric else 176))
+        self.ftp_spin.setValue(state.get('ftp', 200))
+        self.if_slider.setValue(state.get('target_if', 75))
+        self.bike_weight_spin.setValue(state.get('bike_weight', 9 if self._metric else 20))
+        self.cda_combo.setCurrentText(state.get('cda_preset', 'Gravel relaxed (0.380)'))
+        self.cda_spin.setValue(state.get('cda', 0.380))
+        self.drivetrain_spin.setValue(state.get('drivetrain', 0.97))
+        self.surface_combo.setCurrentText(state.get('surface', 'gravel_packed'))
+        self.wind_speed_spin.setValue(state.get('wind_speed', 0))
+        self.wind_dir_combo.setCurrentText(state.get('wind_dir', 'Headwind'))
+        self.temp_spin.setValue(state.get('temperature', 20 if self._metric else 68))
+        self.altitude_spin.setValue(state.get('altitude', 0))
+        self.min_power_spin.setValue(state.get('min_power', 60))
+        self.max_power_spin.setValue(state.get('max_power', 0))
+        self.seg_length_combo.setCurrentText(state.get('segment_length', '200'))

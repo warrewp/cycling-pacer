@@ -1,0 +1,10 @@
+{
+  "paved_road": 0.0035,
+  "paved_smooth": 0.0030,
+  "gravel_packed": 0.0060,
+  "gravel_loose": 0.0090,
+  "dirt_hardpack": 0.0070,
+  "dirt_soft": 0.0120,
+  "grass": 0.0150,
+  "sand": 0.0300
+}
