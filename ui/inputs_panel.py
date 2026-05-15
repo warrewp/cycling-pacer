@@ -1,11 +1,36 @@
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QGroupBox, QFormLayout, QDoubleSpinBox,
-    QComboBox, QSlider, QLabel, QHBoxLayout, QPushButton,
+    QComboBox, QSlider, QLabel, QHBoxLayout, QPushButton, QFrame,
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 from core.physics import load_surfaces
 from ui.units import kg_to_lb, lb_to_kg, m_to_ft, ft_to_m, kmh_to_mph, mph_to_kmh, c_to_f, f_to_c
 
+PANEL_STYLE = """
+    QGroupBox {
+        background: #ffffff;
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        margin-top: 14px;
+        padding-top: 18px;
+        font-size: 11px;
+        font-weight: bold;
+        color: #555;
+    }
+    QGroupBox::title {
+        subcontrol-origin: margin;
+        left: 12px;
+        padding: 0 6px;
+    }
+    QDoubleSpinBox, QComboBox {
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        padding: 3px 6px;
+        background: #fafafa;
+        font-size: 12px;
+    }
+    QLabel { font-size: 12px; color: #444; }
+"""
 
 CDA_PRESETS = {
     'Upright MTB (0.450)': 0.450,
@@ -24,16 +49,36 @@ class InputsPanel(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._metric = True
+        self.setStyleSheet(PANEL_STYLE)
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(8, 4, 8, 8)
+        layout.setSpacing(4)
         layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+
+        # Section label
+        header = QLabel("HARDWARE SPECS")
+        header.setStyleSheet("font-size: 11px; font-weight: bold; color: #888; letter-spacing: 1px; padding: 4px 0;")
+        layout.addWidget(header)
 
         layout.addWidget(self._build_rider_group())
         layout.addWidget(self._build_bike_group())
-        layout.addWidget(self._build_weather_group())
-        layout.addWidget(self._build_race_group())
+
+        header2 = QLabel("WEATHER & STRATEGY")
+        header2.setStyleSheet("font-size: 11px; font-weight: bold; color: #888; letter-spacing: 1px; padding: 8px 0 0 0;")
+        layout.addWidget(header2)
+
+        layout.addWidget(self._build_weather_strategy_group())
 
         self.run_btn = QPushButton("Run Optimizer")
-        self.run_btn.setStyleSheet("font-size: 14px; padding: 8px; font-weight: bold;")
+        self.run_btn.setStyleSheet("""
+            QPushButton {
+                font-size: 14px; padding: 10px; font-weight: bold;
+                background: #4CAF50; color: white; border: none; border-radius: 6px;
+            }
+            QPushButton:hover { background: #43A047; }
+            QPushButton:pressed { background: #388E3C; }
+            QPushButton:disabled { background: #ccc; color: #888; }
+        """)
         self.run_btn.clicked.connect(self.run_requested.emit)
         layout.addWidget(self.run_btn)
 
@@ -46,80 +91,35 @@ class InputsPanel(QWidget):
     def set_units(self, metric: bool):
         if metric == self._metric:
             return
-        old_metric = self._metric
         self._metric = metric
 
-        # Convert current display values
         if metric:
-            # imperial -> metric
-            self.weight_spin.blockSignals(True)
-            self.weight_spin.setRange(30, 200)
-            self.weight_spin.setValue(lb_to_kg(self.weight_spin.value()))
-            self.weight_spin.setSuffix(" kg")
-            self.weight_spin.blockSignals(False)
-
-            self.bike_weight_spin.blockSignals(True)
-            self.bike_weight_spin.setRange(3, 30)
-            self.bike_weight_spin.setValue(lb_to_kg(self.bike_weight_spin.value()))
-            self.bike_weight_spin.setSuffix(" kg")
-            self.bike_weight_spin.blockSignals(False)
-
-            self.wind_speed_spin.blockSignals(True)
-            self.wind_speed_spin.setValue(mph_to_kmh(self.wind_speed_spin.value()))
-            self.wind_speed_spin.setSuffix(" km/h")
-            self.wind_speed_spin.blockSignals(False)
-
-            self.temp_spin.blockSignals(True)
-            self.temp_spin.setRange(-20, 50)
-            self.temp_spin.setValue(f_to_c(self.temp_spin.value()))
-            self.temp_spin.setSuffix(" °C")
-            self.temp_spin.blockSignals(False)
-
-            self.altitude_spin.blockSignals(True)
-            self.altitude_spin.setRange(0, 6000)
-            self.altitude_spin.setValue(ft_to_m(self.altitude_spin.value()))
-            self.altitude_spin.setSuffix(" m")
-            self.altitude_spin.blockSignals(False)
-
-            self.seg_length_label.setText("Segment length (m):")
+            self._convert_spin(self.weight_spin, lb_to_kg, 30, 200, " kg")
+            self._convert_spin(self.bike_weight_spin, lb_to_kg, 3, 30, " kg")
+            self._convert_spin(self.wind_speed_spin, mph_to_kmh, 0, 100, " km/h")
+            self._convert_spin(self.temp_spin, f_to_c, -20, 50, " °C")
+            self._convert_spin(self.altitude_spin, ft_to_m, 0, 6000, " m")
         else:
-            # metric -> imperial
-            self.weight_spin.blockSignals(True)
-            self.weight_spin.setRange(66, 440)
-            self.weight_spin.setValue(kg_to_lb(self.weight_spin.value()))
-            self.weight_spin.setSuffix(" lbs")
-            self.weight_spin.blockSignals(False)
-
-            self.bike_weight_spin.blockSignals(True)
-            self.bike_weight_spin.setRange(7, 66)
-            self.bike_weight_spin.setValue(kg_to_lb(self.bike_weight_spin.value()))
-            self.bike_weight_spin.setSuffix(" lbs")
-            self.bike_weight_spin.blockSignals(False)
-
-            self.wind_speed_spin.blockSignals(True)
-            self.wind_speed_spin.setValue(kmh_to_mph(self.wind_speed_spin.value()))
-            self.wind_speed_spin.setSuffix(" mph")
-            self.wind_speed_spin.blockSignals(False)
-
-            self.temp_spin.blockSignals(True)
-            self.temp_spin.setRange(-4, 122)
-            self.temp_spin.setValue(c_to_f(self.temp_spin.value()))
-            self.temp_spin.setSuffix(" °F")
-            self.temp_spin.blockSignals(False)
-
-            self.altitude_spin.blockSignals(True)
-            self.altitude_spin.setRange(0, 20000)
-            self.altitude_spin.setValue(m_to_ft(self.altitude_spin.value()))
-            self.altitude_spin.setSuffix(" ft")
-            self.altitude_spin.blockSignals(False)
-
-            self.seg_length_label.setText("Segment length (m):")
+            self._convert_spin(self.weight_spin, kg_to_lb, 66, 440, " lbs")
+            self._convert_spin(self.bike_weight_spin, kg_to_lb, 7, 66, " lbs")
+            self._convert_spin(self.wind_speed_spin, kmh_to_mph, 0, 62, " mph")
+            self._convert_spin(self.temp_spin, c_to_f, -4, 122, " °F")
+            self._convert_spin(self.altitude_spin, m_to_ft, 0, 20000, " ft")
 
         self.units_changed.emit("metric" if metric else "imperial")
+
+    def _convert_spin(self, spin, converter, new_min, new_max, suffix):
+        spin.blockSignals(True)
+        new_val = converter(spin.value())
+        spin.setRange(new_min, new_max)
+        spin.setValue(new_val)
+        spin.setSuffix(suffix)
+        spin.blockSignals(False)
 
     def _build_rider_group(self):
         group = QGroupBox("Rider")
         form = QFormLayout(group)
+        form.setSpacing(6)
 
         self.weight_spin = QDoubleSpinBox()
         self.weight_spin.setRange(30, 200)
@@ -139,6 +139,7 @@ class InputsPanel(QWidget):
         self.if_slider.setRange(60, 95)
         self.if_slider.setValue(75)
         self.if_label = QLabel("0.75 — Moderate")
+        self.if_label.setStyleSheet("font-size: 11px; color: #666; min-width: 110px;")
         self.if_slider.valueChanged.connect(self._update_if_label)
         if_layout.addWidget(self.if_slider)
         if_layout.addWidget(self.if_label)
@@ -159,6 +160,7 @@ class InputsPanel(QWidget):
     def _build_bike_group(self):
         group = QGroupBox("Bike")
         form = QFormLayout(group)
+        form.setSpacing(6)
 
         self.bike_weight_spin = QDoubleSpinBox()
         self.bike_weight_spin.setRange(3, 30)
@@ -166,12 +168,11 @@ class InputsPanel(QWidget):
         self.bike_weight_spin.setSuffix(" kg")
         form.addRow("System weight:", self.bike_weight_spin)
 
-        cda_layout = QHBoxLayout()
         self.cda_combo = QComboBox()
         self.cda_combo.addItems(CDA_PRESETS.keys())
         self.cda_combo.setCurrentText('Gravel relaxed (0.380)')
         self.cda_combo.currentTextChanged.connect(self._on_cda_preset)
-        cda_layout.addWidget(self.cda_combo)
+        form.addRow("CdA:", self.cda_combo)
 
         self.cda_spin = QDoubleSpinBox()
         self.cda_spin.setRange(0.15, 0.60)
@@ -179,8 +180,8 @@ class InputsPanel(QWidget):
         self.cda_spin.setSingleStep(0.01)
         self.cda_spin.setValue(0.380)
         self.cda_spin.setSuffix(" m²")
-        cda_layout.addWidget(self.cda_spin)
-        form.addRow("CdA:", cda_layout)
+        self.cda_spin.setEnabled(False)
+        form.addRow("", self.cda_spin)
 
         self.drivetrain_spin = QDoubleSpinBox()
         self.drivetrain_spin.setRange(0.93, 0.99)
@@ -205,9 +206,10 @@ class InputsPanel(QWidget):
         else:
             self.cda_spin.setEnabled(True)
 
-    def _build_weather_group(self):
-        group = QGroupBox("Weather")
+    def _build_weather_strategy_group(self):
+        group = QGroupBox("")
         form = QFormLayout(group)
+        form.setSpacing(6)
 
         self.wind_speed_spin = QDoubleSpinBox()
         self.wind_speed_spin.setRange(0, 100)
@@ -232,11 +234,11 @@ class InputsPanel(QWidget):
         self.altitude_spin.setSuffix(" m")
         form.addRow("Start altitude:", self.altitude_spin)
 
-        return group
-
-    def _build_race_group(self):
-        group = QGroupBox("Race Settings")
-        form = QFormLayout(group)
+        # Separator
+        sep = QFrame()
+        sep.setFrameShape(QFrame.Shape.HLine)
+        sep.setStyleSheet("color: #e0e0e0;")
+        form.addRow(sep)
 
         self.min_power_spin = QDoubleSpinBox()
         self.min_power_spin.setRange(0, 200)
@@ -256,13 +258,12 @@ class InputsPanel(QWidget):
         self.seg_length_combo = QComboBox()
         self.seg_length_combo.addItems(["100", "200", "500"])
         self.seg_length_combo.setCurrentText("200")
-        self.seg_length_label = QLabel("Segment length (m):")
+        self.seg_length_label = QLabel("Segment length:")
         form.addRow(self.seg_length_label, self.seg_length_combo)
 
         return group
 
     def get_params(self):
-        """Returns all params in SI/metric units regardless of display unit."""
         if self._metric:
             wind_kmh = self.wind_speed_spin.value()
             temp_c = self.temp_spin.value()

@@ -4,8 +4,8 @@ from pathlib import Path
 
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QToolBar,
-    QPushButton, QFileDialog, QMessageBox, QProgressDialog, QSplitter,
-    QApplication, QStatusBar, QComboBox,
+    QPushButton, QFileDialog, QMessageBox, QSplitter,
+    QApplication, QStatusBar, QFrame,
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QAction
@@ -19,6 +19,29 @@ from core.fit_export import export_power_course, export_zwift_zwo
 
 CONFIG_DIR = Path.home() / '.cyclingpacer'
 CONFIG_PATH = CONFIG_DIR / 'config.json'
+
+TOOLBAR_BTN = """
+    QPushButton {
+        background: transparent; border: none; padding: 4px 10px;
+        font-size: 12px; color: #555;
+    }
+    QPushButton:hover { color: #222; background: #e8e8e8; border-radius: 4px; }
+    QPushButton:disabled { color: #bbb; }
+"""
+
+TOGGLE_ACTIVE = """
+    QPushButton {
+        background: #4CAF50; color: white; border: none;
+        padding: 3px 10px; font-size: 11px; font-weight: bold; border-radius: 3px;
+    }
+"""
+TOGGLE_INACTIVE = """
+    QPushButton {
+        background: #e0e0e0; color: #666; border: none;
+        padding: 3px 10px; font-size: 11px; border-radius: 3px;
+    }
+    QPushButton:hover { background: #d0d0d0; }
+"""
 
 
 class OptimizerWorker(QThread):
@@ -51,6 +74,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("CyclingPacer")
         self.setMinimumSize(1200, 700)
+        self.setStyleSheet("QMainWindow { background: #f2f2f2; }")
 
         self._gpx_path = None
         self._segments = None
@@ -65,40 +89,79 @@ class MainWindow(QMainWindow):
     def _build_toolbar(self):
         toolbar = QToolBar("Main Toolbar")
         toolbar.setMovable(False)
+        toolbar.setStyleSheet("""
+            QToolBar {
+                background: #fafafa;
+                border-bottom: 1px solid #ddd;
+                spacing: 2px;
+                padding: 2px 8px;
+            }
+        """)
         self.addToolBar(toolbar)
 
-        self.open_action = QAction("Open GPX", self)
-        self.open_action.triggered.connect(self._open_gpx)
-        toolbar.addAction(self.open_action)
+        self.open_btn = QPushButton("Open GPX")
+        self.open_btn.setStyleSheet(TOOLBAR_BTN)
+        self.open_btn.clicked.connect(self._open_gpx)
+        toolbar.addWidget(self.open_btn)
 
-        self.run_action = QAction("Run", self)
-        self.run_action.triggered.connect(self._run_optimizer)
-        self.run_action.setEnabled(False)
-        toolbar.addAction(self.run_action)
-
-        toolbar.addSeparator()
-
-        self.export_fit_action = QAction("Export FIT", self)
-        self.export_fit_action.triggered.connect(self._export_fit)
-        self.export_fit_action.setEnabled(False)
-        toolbar.addAction(self.export_fit_action)
-
-        self.export_zwo_action = QAction("Export ZWO", self)
-        self.export_zwo_action.triggered.connect(self._export_zwo)
-        self.export_zwo_action.setEnabled(False)
-        toolbar.addAction(self.export_zwo_action)
-
-        self.print_action = QAction("Print Cheat Sheet", self)
-        self.print_action.triggered.connect(self._print_cheat_sheet)
-        self.print_action.setEnabled(False)
-        toolbar.addAction(self.print_action)
+        self.run_btn_toolbar = QPushButton("Run")
+        self.run_btn_toolbar.setStyleSheet(TOOLBAR_BTN)
+        self.run_btn_toolbar.clicked.connect(self._run_optimizer)
+        self.run_btn_toolbar.setEnabled(False)
+        toolbar.addWidget(self.run_btn_toolbar)
 
         toolbar.addSeparator()
 
-        self.units_combo = QComboBox()
-        self.units_combo.addItems(["Metric", "Imperial"])
-        self.units_combo.currentTextChanged.connect(self._on_units_changed)
-        toolbar.addWidget(self.units_combo)
+        self.export_fit_btn = QPushButton("Export FIT")
+        self.export_fit_btn.setStyleSheet(TOOLBAR_BTN)
+        self.export_fit_btn.clicked.connect(self._export_fit)
+        self.export_fit_btn.setEnabled(False)
+        toolbar.addWidget(self.export_fit_btn)
+
+        self.export_zwo_btn = QPushButton("Export ZWO")
+        self.export_zwo_btn.setStyleSheet(TOOLBAR_BTN)
+        self.export_zwo_btn.clicked.connect(self._export_zwo)
+        self.export_zwo_btn.setEnabled(False)
+        toolbar.addWidget(self.export_zwo_btn)
+
+        self.print_btn = QPushButton("Print Cheat Sheet")
+        self.print_btn.setStyleSheet(TOOLBAR_BTN)
+        self.print_btn.clicked.connect(self._print_cheat_sheet)
+        self.print_btn.setEnabled(False)
+        toolbar.addWidget(self.print_btn)
+
+        # Spacer
+        spacer = QWidget()
+        spacer.setSizePolicy(spacer.sizePolicy().horizontalPolicy(), spacer.sizePolicy().verticalPolicy())
+        spacer.setMinimumWidth(0)
+        from PyQt6.QtWidgets import QSizePolicy
+        spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        toolbar.addWidget(spacer)
+
+        # Segmented unit toggle
+        toggle_frame = QFrame()
+        toggle_layout = QHBoxLayout(toggle_frame)
+        toggle_layout.setContentsMargins(0, 0, 0, 0)
+        toggle_layout.setSpacing(1)
+
+        self.metric_btn = QPushButton("Metric")
+        self.imperial_btn = QPushButton("Imperial")
+        self.metric_btn.clicked.connect(lambda: self._set_units(True))
+        self.imperial_btn.clicked.connect(lambda: self._set_units(False))
+        self._update_toggle_style(True)
+
+        toggle_layout.addWidget(self.metric_btn)
+        toggle_layout.addWidget(self.imperial_btn)
+        toolbar.addWidget(toggle_frame)
+
+    def _update_toggle_style(self, metric):
+        self.metric_btn.setStyleSheet(TOGGLE_ACTIVE if metric else TOGGLE_INACTIVE)
+        self.imperial_btn.setStyleSheet(TOGGLE_INACTIVE if metric else TOGGLE_ACTIVE)
+
+    def _set_units(self, metric):
+        self._update_toggle_style(metric)
+        self.inputs_panel.set_units(metric)
+        self.results_panel.set_metric(metric)
 
     def _build_central(self):
         splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -106,7 +169,7 @@ class MainWindow(QMainWindow):
         self.inputs_panel = InputsPanel()
         self.inputs_panel.run_requested.connect(self._run_optimizer)
         self.inputs_panel.setMinimumWidth(280)
-        self.inputs_panel.setMaximumWidth(400)
+        self.inputs_panel.setMaximumWidth(380)
         splitter.addWidget(self.inputs_panel)
 
         self.results_panel = ResultsPanel()
@@ -119,6 +182,7 @@ class MainWindow(QMainWindow):
 
     def _build_statusbar(self):
         self.statusbar = QStatusBar()
+        self.statusbar.setStyleSheet("QStatusBar { background: #fafafa; border-top: 1px solid #ddd; color: #888; font-size: 11px; }")
         self.setStatusBar(self.statusbar)
         self.statusbar.showMessage("Open a GPX file to get started")
 
@@ -135,8 +199,9 @@ class MainWindow(QMainWindow):
             self._gpx_path = path
 
             filename = os.path.basename(path)
-            self.statusbar.showMessage(f"Loaded {filename}: {len(self._segments)} segments, {sum(s['distance_m'] for s in self._segments)/1000:.1f} km")
-            self.run_action.setEnabled(True)
+            total_km = sum(s['distance_m'] for s in self._segments) / 1000
+            self.statusbar.showMessage(f"Loaded {filename}: {len(self._segments)} segments, {total_km:.1f} km")
+            self.run_btn_toolbar.setEnabled(True)
 
             if self._segments and self._segments[0].get('elevation_m', 0) > 0:
                 self.inputs_panel.altitude_spin.setValue(self._segments[0]['elevation_m'])
@@ -159,7 +224,7 @@ class MainWindow(QMainWindow):
                 seg['surface'] = params['default_surface']
                 seg['crr'] = crr
 
-        self.run_action.setEnabled(False)
+        self.run_btn_toolbar.setEnabled(False)
         self.inputs_panel.run_btn.setEnabled(False)
         self.statusbar.showMessage("Optimizing...")
 
@@ -177,11 +242,11 @@ class MainWindow(QMainWindow):
         params = self.inputs_panel.get_params()
         self.results_panel.update_results(result, params['ftp_w'])
 
-        self.run_action.setEnabled(True)
+        self.run_btn_toolbar.setEnabled(True)
         self.inputs_panel.run_btn.setEnabled(True)
-        self.export_fit_action.setEnabled(True)
-        self.export_zwo_action.setEnabled(True)
-        self.print_action.setEnabled(True)
+        self.export_fit_btn.setEnabled(True)
+        self.export_zwo_btn.setEnabled(True)
+        self.print_btn.setEnabled(True)
 
         status = "Optimization complete"
         if not result['solver_success']:
@@ -190,7 +255,7 @@ class MainWindow(QMainWindow):
         self._save_config()
 
     def _on_optimizer_error(self, msg):
-        self.run_action.setEnabled(True)
+        self.run_btn_toolbar.setEnabled(True)
         self.inputs_panel.run_btn.setEnabled(True)
         self.statusbar.showMessage("Optimization failed")
         QMessageBox.critical(self, "Optimizer Error", f"Optimization failed:\n{msg}")
@@ -219,23 +284,16 @@ class MainWindow(QMainWindow):
             except Exception as e:
                 QMessageBox.critical(self, "Export Error", str(e))
 
-    def _on_units_changed(self, text):
-        metric = text == "Metric"
-        self.inputs_panel.set_units(metric)
-        self.results_panel.set_metric(metric)
-
     def _print_cheat_sheet(self):
         if not self._result:
             return
         params = self.inputs_panel.get_params()
-        params['temperature_c'] = self.inputs_panel.temp_spin.value()
         name = os.path.splitext(os.path.basename(self._gpx_path or 'Course'))[0]
         open_cheat_sheet(self._result, params, name)
 
     def _save_config(self):
         CONFIG_DIR.mkdir(parents=True, exist_ok=True)
         state = self.inputs_panel.get_state()
-        state['units'] = 'metric' if self.inputs_panel.is_metric else 'imperial'
         with open(CONFIG_PATH, 'w') as f:
             json.dump(state, f, indent=2)
 
@@ -245,7 +303,7 @@ class MainWindow(QMainWindow):
                 with open(CONFIG_PATH) as f:
                     state = json.load(f)
                 if state.get('units') == 'imperial':
-                    self.units_combo.setCurrentText("Imperial")
+                    self._set_units(False)
                 self.inputs_panel.set_state(state)
             except Exception:
                 pass
