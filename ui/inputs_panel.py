@@ -257,7 +257,7 @@ class InputsPanel(QWidget):
 
         self.seg_length_combo = QComboBox()
         self.seg_length_combo.addItems(["100", "200", "500"])
-        self.seg_length_combo.setCurrentText("200")
+        self.seg_length_combo.setCurrentText("100")
         self.seg_length_label = QLabel("Segment length:")
         form.addRow(self.seg_length_label, self.seg_length_combo)
 
@@ -350,4 +350,4 @@ class InputsPanel(QWidget):
         self.altitude_spin.setValue(state.get('altitude', 0))
         self.min_power_spin.setValue(state.get('min_power', 60))
         self.max_power_spin.setValue(state.get('max_power', 0))
-        self.seg_length_combo.setCurrentText(state.get('segment_length', '200'))
+        self.seg_length_combo.setCurrentText(state.get('segment_length', '100'))
