@@ -44,11 +44,11 @@ class ElevationPowerChart(FigureCanvasQTAgg):
     def __init__(self, parent=None):
         self.fig = Figure(figsize=(8, 2.8), dpi=100)
         self.fig.set_facecolor('#f8f8f8')
-        self.fig.subplots_adjust(left=0.06, right=0.94, top=0.95, bottom=0.12)
+        self.fig.subplots_adjust(left=0.07, right=0.93, top=0.95, bottom=0.15)
         super().__init__(self.fig)
-        self.ax_elev = self.fig.add_subplot(111)
-        self.ax_elev.set_facecolor('#f8f8f8')
-        self.ax_power = self.ax_elev.twinx()
+        self.ax_power = self.fig.add_subplot(111)
+        self.ax_power.set_facecolor('#f8f8f8')
+        self.ax_elev = self.ax_power.twinx()
         self._click_callback = None
 
     def set_click_callback(self, callback):
@@ -56,12 +56,12 @@ class ElevationPowerChart(FigureCanvasQTAgg):
         self.mpl_connect('button_press_event', self._on_click)
 
     def _on_click(self, event):
-        if event.inaxes == self.ax_elev and self._click_callback and event.xdata is not None:
+        if event.inaxes == self.ax_power and self._click_callback and event.xdata is not None:
             self._click_callback(event.xdata)
 
     def plot(self, segments, ftp, metric=True):
-        self.ax_elev.clear()
         self.ax_power.clear()
+        self.ax_elev.clear()
 
         if not segments:
             self.draw()
@@ -76,15 +76,16 @@ class ElevationPowerChart(FigureCanvasQTAgg):
         elevations = [s['elevation_m'] * elev_scale for s in segments]
         powers = [s['power_w'] for s in segments]
 
+        # Elevation on right axis (background)
         cum_start = [s['cumulative_m'] / 1000 * dist_scale for s in segments]
         widths = [s['distance_m'] / 1000 * dist_scale for s in segments]
         self.ax_elev.bar(cum_start, elevations, width=widths, align='edge',
                          color='#e8e8e8', edgecolor='none')
-        self.ax_elev.set_xlabel(f'Distance ({dist_unit})', fontsize=9, color='#666')
-        self.ax_elev.set_ylabel(f'Elevation ({elev_unit})', fontsize=9, color='#999')
-        self.ax_elev.tick_params(axis='both', labelsize=8, colors='#999')
+        self.ax_elev.set_ylabel(f'Elevation ({elev_unit})', fontsize=9, color='#bbb')
+        self.ax_elev.tick_params(axis='y', labelsize=8, colors='#bbb')
         self.ax_elev.spines['top'].set_visible(False)
 
+        # Power on left axis (foreground)
         colors = []
         for p in powers:
             if p <= ftp * 0.75:
@@ -103,9 +104,12 @@ class ElevationPowerChart(FigureCanvasQTAgg):
         if len(distances) == 1:
             self.ax_power.plot(distances, powers, 'o', color=colors[0])
 
-        self.ax_power.set_ylabel('Power (W)', fontsize=9, color='#444')
-        self.ax_power.tick_params(axis='y', labelsize=8, colors='#444')
+        self.ax_power.set_ylabel('Power (W)', fontsize=9, color='#333')
+        self.ax_power.set_xlabel(f'Distance ({dist_unit})', fontsize=9, color='#666')
+        self.ax_power.tick_params(axis='both', labelsize=8, colors='#333')
         self.ax_power.spines['top'].set_visible(False)
+        self.ax_power.set_zorder(self.ax_elev.get_zorder() + 1)
+        self.ax_power.patch.set_visible(False)
 
         self.draw()
 
@@ -201,8 +205,8 @@ class ResultsPanel(QWidget):
         d = 'km' if self._metric else 'mi'
         s = 'km/h' if self._metric else 'mph'
         self.table.setHorizontalHeaderLabels([
-            '#', '#', f'Distance ({d})', 'Gradient %', 'Surface',
-            'Target Power', f'Speed ({s})', 'Segment Time', 'Elapsed',
+            '#', 'Seg', f'Dist ({d})', 'Grade %', 'Surface',
+            'Power (W)', f'Speed ({s})', 'Time', 'Elapsed',
         ])
 
     def set_metric(self, metric: bool):
