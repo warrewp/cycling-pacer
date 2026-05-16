@@ -247,12 +247,9 @@ class InputsPanel(QWidget):
         self.cda_spin.setEnabled(False)
         form.addRow("", self.cda_spin)
 
-        self.drivetrain_spin = QDoubleSpinBox()
-        self.drivetrain_spin.setRange(0.93, 0.99)
-        self.drivetrain_spin.setDecimals(2)
-        self.drivetrain_spin.setSingleStep(0.01)
-        self.drivetrain_spin.setValue(0.97)
-        form.addRow("Drivetrain eff.:", self.drivetrain_spin)
+        self.drivetrain_combo = QComboBox()
+        self.drivetrain_combo.addItems(["Clear (97%)", "Dusty (95%)", "Muddy (93%)"])
+        form.addRow("Drivetrain:", self.drivetrain_combo)
 
         self.surface_combo = QComboBox()
         surfaces = load_surfaces()
@@ -325,7 +322,7 @@ class InputsPanel(QWidget):
             'rider': {
                 'mass_kg': rider_kg + bike_kg,
                 'cda': self.cda_spin.value(),
-                'drivetrain_eff': self.drivetrain_spin.value(),
+                'drivetrain_eff': {"Clear (97%)": 0.97, "Dusty (95%)": 0.95, "Muddy (93%)": 0.93}.get(self.drivetrain_combo.currentText(), 0.97),
             },
             'env': {
                 'wind_ms': wind_ms,
@@ -349,7 +346,7 @@ class InputsPanel(QWidget):
             'bike_weight': self.bike_weight_spin.value(),
             'cda_preset': self.cda_combo.currentText(),
             'cda': self.cda_spin.value(),
-            'drivetrain': self.drivetrain_spin.value(),
+            'drivetrain': self.drivetrain_combo.currentText(),
             'surface': self.surface_combo.currentText(),
             'wind_speed': self.wind_speed_spin.value(),
             'wind_dir': self.wind_dir_combo.currentText(),
@@ -368,7 +365,7 @@ class InputsPanel(QWidget):
         self.bike_weight_spin.setValue(state.get('bike_weight', 9 if self._metric else 20))
         self.cda_combo.setCurrentText(state.get('cda_preset', 'Gravel relaxed (0.380)'))
         self.cda_spin.setValue(state.get('cda', 0.380))
-        self.drivetrain_spin.setValue(state.get('drivetrain', 0.97))
+        self.drivetrain_combo.setCurrentText(state.get('drivetrain', 'Clear (97%)'))
         self.surface_combo.setCurrentText(state.get('surface', 'gravel_packed'))
         self.wind_speed_spin.setValue(state.get('wind_speed', 0))
         self.wind_dir_combo.setCurrentText(state.get('wind_dir', 'Headwind'))
