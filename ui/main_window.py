@@ -243,7 +243,7 @@ class MainWindow(QMainWindow):
             self.tabs.setCurrentIndex(0)
 
             if self._segments and self._segments[0].get('elevation_m', 0) > 0:
-                self.inputs_panel.altitude_spin.setValue(self._segments[0]['elevation_m'])
+                self.inputs_panel.set_start_elevation(self._segments[0]['elevation_m'])
 
         except Exception as e:
             QMessageBox.critical(self, "GPX Error", f"Failed to parse GPX file:\n{str(e)}")

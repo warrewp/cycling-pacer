@@ -164,13 +164,11 @@ class InputsPanel(QWidget):
             self._convert_spin(self.bike_weight_spin, lb_to_kg, 3, 30, " kg")
             self._convert_spin(self.wind_speed_spin, mph_to_kmh, 0, 100, " km/h")
             self._convert_spin(self.temp_spin, f_to_c, -20, 50, " °C")
-            self._convert_spin(self.altitude_spin, ft_to_m, 0, 6000, " m")
         else:
             self._convert_spin(self.weight_spin, kg_to_lb, 66, 440, " lbs")
             self._convert_spin(self.bike_weight_spin, kg_to_lb, 7, 66, " lbs")
             self._convert_spin(self.wind_speed_spin, kmh_to_mph, 0, 62, " mph")
             self._convert_spin(self.temp_spin, c_to_f, -4, 122, " °F")
-            self._convert_spin(self.altitude_spin, m_to_ft, 0, 20000, " ft")
 
         self.units_changed.emit("metric" if metric else "imperial")
 
@@ -293,29 +291,25 @@ class InputsPanel(QWidget):
         self.temp_spin.setSuffix(" °C")
         form.addRow("Temperature:", self.temp_spin)
 
-        self.altitude_spin = QDoubleSpinBox()
-        self.altitude_spin.setRange(0, 6000)
-        self.altitude_spin.setDecimals(0)
-        self.altitude_spin.setValue(0)
-        self.altitude_spin.setSuffix(" m")
-        form.addRow("Start altitude:", self.altitude_spin)
-
 
         return group
+
+    def set_start_elevation(self, elevation_m):
+        self._start_elevation_m = elevation_m
 
     def get_params(self):
         if self._metric:
             wind_kmh = self.wind_speed_spin.value()
             temp_c = self.temp_spin.value()
-            alt_m = self.altitude_spin.value()
             rider_kg = self.weight_spin.value()
             bike_kg = self.bike_weight_spin.value()
         else:
             wind_kmh = mph_to_kmh(self.wind_speed_spin.value())
             temp_c = f_to_c(self.temp_spin.value())
-            alt_m = ft_to_m(self.altitude_spin.value())
             rider_kg = lb_to_kg(self.weight_spin.value())
             bike_kg = lb_to_kg(self.bike_weight_spin.value())
+
+        alt_m = getattr(self, '_start_elevation_m', 0)
 
         wind_ms = wind_kmh / 3.6
         wind_dir = self.wind_dir_combo.currentText()
@@ -360,7 +354,6 @@ class InputsPanel(QWidget):
             'wind_speed': self.wind_speed_spin.value(),
             'wind_dir': self.wind_dir_combo.currentText(),
             'temperature': self.temp_spin.value(),
-            'altitude': self.altitude_spin.value(),
         }
 
     def set_state(self, state):
@@ -380,4 +373,3 @@ class InputsPanel(QWidget):
         self.wind_speed_spin.setValue(state.get('wind_speed', 0))
         self.wind_dir_combo.setCurrentText(state.get('wind_dir', 'Headwind'))
         self.temp_spin.setValue(state.get('temperature', 20 if self._metric else 68))
-        self.altitude_spin.setValue(state.get('altitude', 0))
