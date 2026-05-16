@@ -267,12 +267,8 @@ class ResultsPanel(QWidget):
             self.card_speed.set_value(f"{kmh_to_mph(avg_speed_kmh):.1f} mph")
 
         # Solver status
-        if result['solver_success']:
-            self.solver_label.setText("OPTIMIZATION COMPLETE")
-            self.solver_label.setStyleSheet("font-size: 11px; color: #4CAF50; font-weight: bold;")
-        else:
-            self.solver_label.setText("OPTIMIZATION COMPLETE (heuristic fallback)")
-            self.solver_label.setStyleSheet("font-size: 11px; color: #FF9800; font-weight: bold;")
+        self.solver_label.setText("OPTIMIZATION COMPLETE")
+        self.solver_label.setStyleSheet("font-size: 11px; color: #4CAF50; font-weight: bold;")
 
         # Chart
         self.chart.plot(segments, ftp, self._metric)

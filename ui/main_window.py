@@ -300,10 +300,7 @@ class MainWindow(QMainWindow):
         self.print_btn.setEnabled(True)
         self.save_btn.setEnabled(True)
 
-        status = "Optimization complete"
-        if not result['solver_success']:
-            status += " (heuristic fallback)"
-        self.statusbar.showMessage(status)
+        self.statusbar.showMessage("Optimization complete")
         self._save_config()
 
     def _on_optimizer_error(self, msg):

@@ -234,33 +234,6 @@ class InputsPanel(QWidget):
         self.altitude_spin.setSuffix(" m")
         form.addRow("Start altitude:", self.altitude_spin)
 
-        # Separator
-        sep = QFrame()
-        sep.setFrameShape(QFrame.Shape.HLine)
-        sep.setStyleSheet("color: #e0e0e0;")
-        form.addRow(sep)
-
-        self.min_power_spin = QDoubleSpinBox()
-        self.min_power_spin.setRange(0, 200)
-        self.min_power_spin.setDecimals(0)
-        self.min_power_spin.setValue(0)
-        self.min_power_spin.setSuffix(" W")
-        self.min_power_spin.setSpecialValueText("0 W (coast on descents)")
-        form.addRow("Min power:", self.min_power_spin)
-
-        self.max_power_spin = QDoubleSpinBox()
-        self.max_power_spin.setRange(0, 1000)
-        self.max_power_spin.setDecimals(0)
-        self.max_power_spin.setValue(0)
-        self.max_power_spin.setSuffix(" W")
-        self.max_power_spin.setSpecialValueText("Auto (FTP × 1.50)")
-        form.addRow("Max power:", self.max_power_spin)
-
-        self.seg_length_combo = QComboBox()
-        self.seg_length_combo.addItems(["100", "200", "500"])
-        self.seg_length_combo.setCurrentText("100")
-        self.seg_length_label = QLabel("Segment length:")
-        form.addRow(self.seg_length_label, self.seg_length_combo)
 
         return group
 
@@ -288,10 +261,6 @@ class InputsPanel(QWidget):
         from core.physics import air_density
         rho = air_density(temp_c, alt_m)
 
-        max_power = self.max_power_spin.value()
-        if max_power == 0:
-            max_power = None
-
         return {
             'rider': {
                 'mass_kg': rider_kg + bike_kg,
@@ -304,9 +273,9 @@ class InputsPanel(QWidget):
             },
             'ftp_w': self.ftp_spin.value(),
             'target_if': self.if_slider.value() / 100,
-            'min_power_w': self.min_power_spin.value(),
-            'max_power_w': max_power,
-            'segment_length_m': int(self.seg_length_combo.currentText()),
+            'min_power_w': 0,
+            'max_power_w': None,
+            'segment_length_m': 100,
             'default_surface': self.surface_combo.currentText(),
             'temperature_c': temp_c,
         }
@@ -326,9 +295,6 @@ class InputsPanel(QWidget):
             'wind_dir': self.wind_dir_combo.currentText(),
             'temperature': self.temp_spin.value(),
             'altitude': self.altitude_spin.value(),
-            'min_power': self.min_power_spin.value(),
-            'max_power': self.max_power_spin.value(),
-            'segment_length': self.seg_length_combo.currentText(),
         }
 
     def set_state(self, state):
@@ -349,6 +315,3 @@ class InputsPanel(QWidget):
         self.wind_dir_combo.setCurrentText(state.get('wind_dir', 'Headwind'))
         self.temp_spin.setValue(state.get('temperature', 20 if self._metric else 68))
         self.altitude_spin.setValue(state.get('altitude', 0))
-        self.min_power_spin.setValue(state.get('min_power', 60))
-        self.max_power_spin.setValue(state.get('max_power', 0))
-        self.seg_length_combo.setCurrentText(state.get('segment_length', '100'))
