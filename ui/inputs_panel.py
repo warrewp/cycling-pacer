@@ -243,8 +243,9 @@ class InputsPanel(QWidget):
         self.min_power_spin = QDoubleSpinBox()
         self.min_power_spin.setRange(0, 200)
         self.min_power_spin.setDecimals(0)
-        self.min_power_spin.setValue(60)
+        self.min_power_spin.setValue(0)
         self.min_power_spin.setSuffix(" W")
+        self.min_power_spin.setSpecialValueText("0 W (coast on descents)")
         form.addRow("Min power:", self.min_power_spin)
 
         self.max_power_spin = QDoubleSpinBox()
@@ -252,7 +253,7 @@ class InputsPanel(QWidget):
         self.max_power_spin.setDecimals(0)
         self.max_power_spin.setValue(0)
         self.max_power_spin.setSuffix(" W")
-        self.max_power_spin.setSpecialValueText("Auto (FTP × 1.15)")
+        self.max_power_spin.setSpecialValueText("Auto (FTP × 1.50)")
         form.addRow("Max power:", self.max_power_spin)
 
         self.seg_length_combo = QComboBox()

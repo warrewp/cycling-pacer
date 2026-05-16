@@ -1,40 +1,84 @@
 import time
 import numpy as np
 from scipy.optimize import minimize
-from core.physics import segment_time, speed_from_power
+from core.physics import segment_time, speed_from_power, power_from_speed
 from core.normalized_power import (
     weighted_avg_power, intensity_factor, training_stress_score, variability_index
 )
 
 MAX_SOLVER_SECONDS = 15
-SLSQP_MAX_SEGMENTS = 30
+SLSQP_MAX_SEGMENTS = 150
+
+
+def _gradient_power(gradient, target_power, min_power_w):
+    """Compute power for a segment based on gradient, matching BBS-style allocation.
+
+    On steep descents, coast at 0W (gravity provides speed).
+    On climbs, push harder — diminishing returns on descents but big time
+    savings on climbs due to nonlinear power-speed relationship.
+    """
+    g_pct = gradient * 100
+
+    if g_pct < -5:
+        return 0.0
+    elif g_pct < -3:
+        return 0.0
+    elif g_pct < -1:
+        frac = (g_pct + 3) / 2  # -3% -> 0, -1% -> 1
+        return target_power * (0.05 + 0.35 * max(0, frac))
+    elif g_pct < 1:
+        return target_power * 1.0
+    elif g_pct < 3:
+        frac = (g_pct - 1) / 2  # 1% -> 0, 3% -> 1
+        return target_power * (1.0 + 0.30 * frac)
+    elif g_pct < 5:
+        frac = (g_pct - 3) / 2  # 3% -> 0, 5% -> 1
+        return target_power * (1.30 + 0.12 * frac)
+    else:
+        return target_power * 1.45
+
+
+def _compute_min_power(gradient):
+    """Per-segment minimum: 0W on descents, higher floor on flats/climbs."""
+    if gradient < -0.02:
+        return 0.0
+    return 0.0
 
 
 def _heuristic_pacing(segments, rider, env, ftp_w, target_if, min_power_w, max_power_w):
     target_power = ftp_w * target_if
+
     powers = []
     for seg in segments:
         g = seg.get('gradient', 0.0)
-        if g > 0.08:
-            p = target_power * 1.08
-        elif g > 0.03:
-            p = target_power * 1.05
-        elif g < -0.05:
-            p = max(min_power_w, target_power * 0.65)
-        elif g < -0.03:
-            p = max(min_power_w, target_power * 0.80)
-        else:
-            p = target_power
-        p = max(min_power_w, min(max_power_w, p))
+        p = _gradient_power(g, target_power, min_power_w)
+        p = min(max_power_w, p)
         powers.append(p)
 
-    for _ in range(5):
-        times = [segment_time(p, s, rider, env) for p, s in zip(powers, segments)]
+    # Iteratively scale to hit WAP target
+    for iteration in range(10):
+        times = []
+        for p, s in zip(powers, segments):
+            times.append(segment_time(p, s, rider, env))
+
         wap = weighted_avg_power(powers, times)
         if wap <= 0:
             break
-        scale = target_power / wap
-        powers = [max(min_power_w, min(max_power_w, p * scale)) for p in powers]
+
+        ratio = target_power / wap
+        if abs(ratio - 1.0) < 0.005:
+            break
+
+        new_powers = []
+        for p, s in zip(powers, segments):
+            g = s.get('gradient', 0.0)
+            if g < -0.03 and p <= 1.0:
+                new_powers.append(p)
+            else:
+                scaled = p * ratio
+                scaled = max(_compute_min_power(g), min(max_power_w, scaled))
+                new_powers.append(scaled)
+        powers = new_powers
 
     times = [segment_time(p, s, rider, env) for p, s in zip(powers, segments)]
     wap = weighted_avg_power(powers, times)
@@ -55,14 +99,20 @@ def _downsample_segments(segments, target_count):
         end = min(int(i + step), len(segments))
         group = segments[start:end]
 
+        total_dist = sum(s['distance_m'] for s in group)
+        if total_dist > 0:
+            avg_gradient = sum(s['gradient'] * s['distance_m'] for s in group) / total_dist
+        else:
+            avg_gradient = group[0]['gradient']
+
         merged = {
             'index': len(downsampled),
             'lat': group[0]['lat'],
             'lon': group[0]['lon'],
-            'distance_m': sum(s['distance_m'] for s in group),
+            'distance_m': total_dist,
             'cumulative_m': group[0]['cumulative_m'],
             'elevation_m': group[0]['elevation_m'],
-            'gradient': np.mean([s['gradient'] for s in group]),
+            'gradient': avg_gradient,
             'surface': group[0]['surface'],
             'crr': np.mean([s.get('crr', 0.006) for s in group]),
             'zone_label': group[0]['zone_label'],
@@ -75,8 +125,9 @@ def _downsample_segments(segments, target_count):
     return downsampled, mapping
 
 
-def _upsample_powers(powers, mapping, original_count):
-    full_powers = [0.0] * original_count
+def _upsample_powers(powers, mapping, original_segments):
+    """Map downsampled powers back to original segments, adjusting for gradient."""
+    full_powers = [0.0] * len(original_segments)
     for power, (start, end) in zip(powers, mapping):
         for j in range(start, end):
             full_powers[j] = power
@@ -89,12 +140,12 @@ def optimize_pacing(
     env: dict,
     ftp_w: float,
     target_if: float = 0.75,
-    min_power_w: float = 60,
+    min_power_w: float = 0,
     max_power_w: float = None,
     solver_tolerance: float = 1e-4,
 ) -> dict:
     if max_power_w is None:
-        max_power_w = ftp_w * 1.15
+        max_power_w = ftp_w * 1.50
 
     original_segments = segments
     mapping = None
@@ -102,48 +153,62 @@ def optimize_pacing(
     solver_success = False
     solver_message = ""
 
-    if len(segments) <= SLSQP_MAX_SEGMENTS:
-        n = len(segments)
-        target_wap = ftp_w * target_if
+    # Downsample large courses for SLSQP
+    solve_segments = segments
+    if len(segments) > SLSQP_MAX_SEGMENTS:
+        solve_segments, mapping = _downsample_segments(segments, SLSQP_MAX_SEGMENTS)
 
-        def objective(power_array):
-            times = [segment_time(p, s, rider, env) for p, s in zip(power_array, segments)]
-            return sum(times)
+    n = len(solve_segments)
+    target_wap = ftp_w * target_if
 
-        def wap_constraint(power_array):
-            times = [segment_time(p, s, rider, env) for p, s in zip(power_array, segments)]
-            wap = weighted_avg_power(list(power_array), times)
-            return target_wap - wap
+    # Build per-segment bounds: allow 0W on descents
+    bounds = []
+    for seg in solve_segments:
+        g = seg.get('gradient', 0.0)
+        seg_min = _compute_min_power(g)
+        bounds.append((seg_min, max_power_w))
 
-        constraints = [{'type': 'ineq', 'fun': wap_constraint}]
-        bounds = [(min_power_w, max_power_w)] * n
-        x0 = np.full(n, target_wap)
+    # Warm start from heuristic
+    h_powers, _, _ = _heuristic_pacing(solve_segments, rider, env, ftp_w, target_if, min_power_w, max_power_w)
+    x0 = np.array(h_powers)
 
-        start_time = time.time()
-        try:
-            result = minimize(
-                objective, x0,
-                method='SLSQP',
-                bounds=bounds,
-                constraints=constraints,
-                options={'maxiter': 500, 'ftol': solver_tolerance},
-            )
-            elapsed = time.time() - start_time
+    def objective(power_array):
+        times = [segment_time(p, s, rider, env) for p, s in zip(power_array, solve_segments)]
+        return sum(times)
 
-            if result.success and elapsed < MAX_SOLVER_SECONDS:
-                powers = list(result.x)
-                solver_success = True
-                solver_message = "SLSQP optimization successful"
-            else:
-                powers, _, _ = _heuristic_pacing(segments, rider, env, ftp_w, target_if, min_power_w, max_power_w)
-                solver_message = f"SLSQP incomplete ({elapsed:.1f}s); using heuristic"
-        except Exception as e:
-            powers, _, _ = _heuristic_pacing(segments, rider, env, ftp_w, target_if, min_power_w, max_power_w)
-            solver_message = f"Solver error: {str(e)}; using heuristic"
-    else:
-        powers, _, _ = _heuristic_pacing(segments, rider, env, ftp_w, target_if, min_power_w, max_power_w)
-        solver_success = False
-        solver_message = f"Course has {len(segments)} segments; using gradient-based heuristic for speed"
+    def wap_constraint(power_array):
+        times = [segment_time(p, s, rider, env) for p, s in zip(power_array, solve_segments)]
+        wap = weighted_avg_power(list(power_array), times)
+        return target_wap - wap
+
+    constraints = [{'type': 'ineq', 'fun': wap_constraint}]
+
+    start_time = time.time()
+    try:
+        result = minimize(
+            objective, x0,
+            method='SLSQP',
+            bounds=bounds,
+            constraints=constraints,
+            options={'maxiter': 500, 'ftol': solver_tolerance},
+        )
+        elapsed = time.time() - start_time
+
+        if result.success and elapsed < MAX_SOLVER_SECONDS:
+            powers = list(result.x)
+            solver_success = True
+            solver_message = f"SLSQP optimization successful ({elapsed:.1f}s)"
+        else:
+            powers = h_powers
+            solver_message = f"SLSQP incomplete ({elapsed:.1f}s); using heuristic"
+    except Exception as e:
+        powers = h_powers
+        solver_message = f"Solver error: {str(e)}; using heuristic"
+
+    # Upsample if we downsampled
+    if mapping is not None:
+        powers = _upsample_powers(powers, mapping, original_segments)
+        segments = original_segments
 
     times = [segment_time(p, s, rider, env) for p, s in zip(powers, segments)]
     speeds = []

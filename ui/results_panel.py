@@ -88,7 +88,9 @@ class ElevationPowerChart(FigureCanvasQTAgg):
         # Power on left axis (foreground)
         colors = []
         for p in powers:
-            if p <= ftp * 0.75:
+            if p <= 1:
+                colors.append('#90CAF9')
+            elif p <= ftp * 0.75:
                 colors.append('#4CAF50')
             elif p <= ftp * 0.90:
                 colors.append('#FFC107')
@@ -289,7 +291,9 @@ class ResultsPanel(QWidget):
 
             power_item = QTableWidgetItem(f"{seg['power_w']:.0f}")
             p = seg['power_w']
-            if p <= ftp * 0.75:
+            if p <= 1:
+                power_item.setForeground(QColor('#90CAF9'))
+            elif p <= ftp * 0.75:
                 power_item.setForeground(QColor('#4CAF50'))
             elif p <= ftp * 0.90:
                 power_item.setForeground(QColor('#FF9800'))
