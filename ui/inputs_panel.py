@@ -22,7 +22,7 @@ PANEL_STYLE = """
         left: 12px;
         padding: 0 6px;
     }
-    QDoubleSpinBox, QComboBox {
+    QDoubleSpinBox {
         border: 1px solid #ddd;
         border-radius: 4px;
         padding: 3px 6px;
