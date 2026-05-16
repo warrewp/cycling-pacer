@@ -7,6 +7,14 @@ def main():
     app = QApplication(sys.argv)
     app.setApplicationName("CyclingPacer")
     app.setStyle("Fusion")
+    app.setStyleSheet("""
+        QComboBox QAbstractItemView {
+            background: #ffffff;
+            color: #333;
+            selection-background-color: #4CAF50;
+            selection-color: #ffffff;
+        }
+    """)
     window = MainWindow()
     window.show()
     sys.exit(app.exec())

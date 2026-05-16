@@ -29,13 +29,7 @@ PANEL_STYLE = """
         background: #fafafa;
         font-size: 12px;
     }
-    QComboBox QAbstractItemView {
-        background: #ffffff;
-        selection-background-color: #4CAF50;
-        selection-color: #ffffff;
-        color: #333;
-    }
-    QLabel { font-size: 12px; color: #444; }
+QLabel { font-size: 12px; color: #444; }
 """
 
 CDA_PRESETS = {
