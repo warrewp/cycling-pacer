@@ -8,8 +8,9 @@ from PyQt6.QtCore import Qt, pyqtSignal
 from core.physics import load_surfaces
 from ui.units import kg_to_lb, lb_to_kg, m_to_ft, ft_to_m, kmh_to_mph, mph_to_kmh, c_to_f, f_to_c
 
-_ARROW_PATH = _os.path.join(_os.path.dirname(__file__), '..', 'data', 'arrow_down.png')
-_ARROW_PATH = _os.path.abspath(_ARROW_PATH).replace('\\', '/')
+_DATA_DIR = _os.path.abspath(_os.path.join(_os.path.dirname(__file__), '..', 'data')).replace('\\', '/')
+_ARROW_DOWN = f'{_DATA_DIR}/arrow_down.png'
+_ARROW_UP = f'{_DATA_DIR}/arrow_up.png'
 
 PANEL_STYLE = f"""
     QGroupBox {{
@@ -31,8 +32,40 @@ PANEL_STYLE = f"""
         border: 1px solid #ddd;
         border-radius: 4px;
         padding: 3px 6px;
+        padding-right: 18px;
         background: #fafafa;
         font-size: 12px;
+    }}
+    QDoubleSpinBox::up-button {{
+        subcontrol-origin: border;
+        subcontrol-position: top right;
+        width: 18px;
+        border: none;
+        border-left: 1px solid #ddd;
+        background: #f0f0f0;
+        border-top-right-radius: 4px;
+    }}
+    QDoubleSpinBox::down-button {{
+        subcontrol-origin: border;
+        subcontrol-position: bottom right;
+        width: 18px;
+        border: none;
+        border-left: 1px solid #ddd;
+        background: #f0f0f0;
+        border-bottom-right-radius: 4px;
+    }}
+    QDoubleSpinBox::up-arrow {{
+        image: url({_ARROW_UP});
+        width: 8px;
+        height: 5px;
+    }}
+    QDoubleSpinBox::down-arrow {{
+        image: url({_ARROW_DOWN});
+        width: 8px;
+        height: 5px;
+    }}
+    QDoubleSpinBox::up-button:hover, QDoubleSpinBox::down-button:hover {{
+        background: #e0e0e0;
     }}
     QComboBox {{
         border: 1px solid #ddd;
@@ -50,7 +83,7 @@ PANEL_STYLE = f"""
         border: none;
     }}
     QComboBox::down-arrow {{
-        image: url({_ARROW_PATH});
+        image: url({_ARROW_DOWN});
         width: 10px;
         height: 6px;
     }}
