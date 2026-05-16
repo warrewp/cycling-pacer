@@ -1,3 +1,5 @@
+import os as _os
+
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QGroupBox, QFormLayout, QDoubleSpinBox,
     QComboBox, QSlider, QLabel, QHBoxLayout, QPushButton, QFrame,
@@ -6,8 +8,11 @@ from PyQt6.QtCore import Qt, pyqtSignal
 from core.physics import load_surfaces
 from ui.units import kg_to_lb, lb_to_kg, m_to_ft, ft_to_m, kmh_to_mph, mph_to_kmh, c_to_f, f_to_c
 
-PANEL_STYLE = """
-    QGroupBox {
+_ARROW_PATH = _os.path.join(_os.path.dirname(__file__), '..', 'data', 'arrow_down.png')
+_ARROW_PATH = _os.path.abspath(_ARROW_PATH).replace('\\', '/')
+
+PANEL_STYLE = f"""
+    QGroupBox {{
         background: #ffffff;
         border: 1px solid #e0e0e0;
         border-radius: 8px;
@@ -16,20 +21,48 @@ PANEL_STYLE = """
         font-size: 11px;
         font-weight: bold;
         color: #555;
-    }
-    QGroupBox::title {
+    }}
+    QGroupBox::title {{
         subcontrol-origin: margin;
         left: 12px;
         padding: 0 6px;
-    }
-    QDoubleSpinBox {
+    }}
+    QDoubleSpinBox {{
         border: 1px solid #ddd;
         border-radius: 4px;
         padding: 3px 6px;
         background: #fafafa;
         font-size: 12px;
-    }
-QLabel { font-size: 12px; color: #444; }
+    }}
+    QComboBox {{
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        padding: 3px 6px;
+        padding-right: 20px;
+        background: #fafafa;
+        font-size: 12px;
+        color: #333;
+    }}
+    QComboBox::drop-down {{
+        subcontrol-origin: padding;
+        subcontrol-position: center right;
+        width: 20px;
+        border: none;
+    }}
+    QComboBox::down-arrow {{
+        image: url({_ARROW_PATH});
+        width: 10px;
+        height: 6px;
+    }}
+    QComboBox QAbstractItemView {{
+        background: #ffffff;
+        color: #333;
+        selection-background-color: #4CAF50;
+        selection-color: #ffffff;
+        border: 1px solid #ccc;
+        outline: none;
+    }}
+    QLabel {{ font-size: 12px; color: #444; }}
 """
 
 CDA_PRESETS = {
