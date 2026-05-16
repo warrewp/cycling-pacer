@@ -84,8 +84,8 @@ PANEL_STYLE = f"""
     }}
     QComboBox::down-arrow {{
         image: url({_ARROW_DOWN});
-        width: 10px;
-        height: 6px;
+        width: 8px;
+        height: 5px;
     }}
     QComboBox QAbstractItemView {{
         background: #ffffff;
