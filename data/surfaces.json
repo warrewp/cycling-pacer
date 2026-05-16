@@ -1,6 +1,7 @@
 {
   "paved_road": 0.0035,
   "paved_smooth": 0.0030,
+  "gravel_race": 0.0049,
   "gravel_packed": 0.0060,
   "gravel_loose": 0.0090,
   "dirt_hardpack": 0.0070,
