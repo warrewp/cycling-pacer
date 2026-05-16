@@ -44,7 +44,7 @@ class ElevationPowerChart(FigureCanvasQTAgg):
     def __init__(self, parent=None):
         self.fig = Figure(figsize=(8, 2.8), dpi=100)
         self.fig.set_facecolor('#f8f8f8')
-        self.fig.subplots_adjust(left=0.05, right=0.95, top=0.92, bottom=0.15)
+        self.fig.subplots_adjust(left=0.05, right=0.95, top=0.92, bottom=0.20)
         super().__init__(self.fig)
         self.ax_power = self.fig.add_subplot(111)
         self.ax_power.set_facecolor('#f8f8f8')
