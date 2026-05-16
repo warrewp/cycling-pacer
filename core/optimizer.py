@@ -7,7 +7,7 @@ from core.normalized_power import (
 )
 
 MAX_SOLVER_SECONDS = 15
-SLSQP_MAX_SEGMENTS = 150
+SLSQP_MAX_SEGMENTS = 50
 
 
 def _gradient_power(gradient, target_power, min_power_w):
@@ -153,57 +153,56 @@ def optimize_pacing(
     solver_success = False
     solver_message = ""
 
-    # Downsample large courses for SLSQP
-    solve_segments = segments
-    if len(segments) > SLSQP_MAX_SEGMENTS:
-        solve_segments, mapping = _downsample_segments(segments, SLSQP_MAX_SEGMENTS)
-
-    n = len(solve_segments)
     target_wap = ftp_w * target_if
 
-    # Build per-segment bounds: allow 0W on descents
-    bounds = []
-    for seg in solve_segments:
-        g = seg.get('gradient', 0.0)
-        seg_min = _compute_min_power(g)
-        bounds.append((seg_min, max_power_w))
+    if len(segments) <= SLSQP_MAX_SEGMENTS:
+        n = len(segments)
 
-    # Warm start from heuristic
-    h_powers, _, _ = _heuristic_pacing(solve_segments, rider, env, ftp_w, target_if, min_power_w, max_power_w)
-    x0 = np.array(h_powers)
+        bounds = []
+        for seg in segments:
+            g = seg.get('gradient', 0.0)
+            seg_min = _compute_min_power(g)
+            bounds.append((seg_min, max_power_w))
 
-    def objective(power_array):
-        times = [segment_time(p, s, rider, env) for p, s in zip(power_array, solve_segments)]
-        return sum(times)
+        h_powers, _, _ = _heuristic_pacing(segments, rider, env, ftp_w, target_if, min_power_w, max_power_w)
+        x0 = np.array(h_powers)
 
-    def wap_constraint(power_array):
-        times = [segment_time(p, s, rider, env) for p, s in zip(power_array, solve_segments)]
-        wap = weighted_avg_power(list(power_array), times)
-        return target_wap - wap
+        def objective(power_array):
+            times = [segment_time(p, s, rider, env) for p, s in zip(power_array, segments)]
+            return sum(times)
 
-    constraints = [{'type': 'ineq', 'fun': wap_constraint}]
+        def wap_constraint(power_array):
+            times = [segment_time(p, s, rider, env) for p, s in zip(power_array, segments)]
+            wap = weighted_avg_power(list(power_array), times)
+            return target_wap - wap
 
-    start_time = time.time()
-    try:
-        result = minimize(
-            objective, x0,
-            method='SLSQP',
-            bounds=bounds,
-            constraints=constraints,
-            options={'maxiter': 500, 'ftol': solver_tolerance},
-        )
-        elapsed = time.time() - start_time
+        constraints = [{'type': 'ineq', 'fun': wap_constraint}]
 
-        if result.success and elapsed < MAX_SOLVER_SECONDS:
-            powers = list(result.x)
-            solver_success = True
-            solver_message = f"SLSQP optimization successful ({elapsed:.1f}s)"
-        else:
+        start_time = time.time()
+        try:
+            result = minimize(
+                objective, x0,
+                method='SLSQP',
+                bounds=bounds,
+                constraints=constraints,
+                options={'maxiter': 500, 'ftol': solver_tolerance},
+            )
+            elapsed = time.time() - start_time
+
+            if result.success and elapsed < MAX_SOLVER_SECONDS:
+                powers = list(result.x)
+                solver_success = True
+                solver_message = f"SLSQP optimization successful ({elapsed:.1f}s)"
+            else:
+                powers = h_powers
+                solver_message = f"SLSQP incomplete ({elapsed:.1f}s); using heuristic"
+        except Exception as e:
             powers = h_powers
-            solver_message = f"SLSQP incomplete ({elapsed:.1f}s); using heuristic"
-    except Exception as e:
-        powers = h_powers
-        solver_message = f"Solver error: {str(e)}; using heuristic"
+            solver_message = f"Solver error: {str(e)}; using heuristic"
+    else:
+        powers, _, _ = _heuristic_pacing(segments, rider, env, ftp_w, target_if, min_power_w, max_power_w)
+        solver_success = False
+        solver_message = f"Course has {len(segments)} segments; using gradient-based heuristic"
 
     # Upsample if we downsampled
     if mapping is not None:
